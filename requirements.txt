@@ -3,3 +3,4 @@ requests==2.31.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 py-ed25519-blake2b
+Pillow==10.1.0
