@@ -1,3 +1,6 @@
 .env
-venv
-__pycache__
+faucet.db
+__pycache__/
+*.pyc
+.venv/
+venv/
