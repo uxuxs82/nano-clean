@@ -131,7 +131,7 @@ button:disabled{background:#7a8fc9;cursor:not-allowed}
 <input type="text" name="wallet" placeholder="nano_..." autocomplete="off" spellcheck="false" required>
 <div class="captcha-row">
   <img src="data:image/png;base64,{{ captcha_img }}" alt="captcha">
-  <input type="text" name="captcha" placeholder="code" autocomplete="off" required maxlength="6">
+  <input type="text" name="captcha" placeholder="captcha" autocomplete="off" required maxlength="6">
 </div>
 <input type="hidden" name="pow_challenge" value="{{ pow_challenge }}">
 <input type="hidden" name="pow_nonce" id="pow_nonce" value="">
