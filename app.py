@@ -2,25 +2,29 @@ import os
 import sqlite3
 import time
 import hashlib
+import random
 import requests
-from flask import Flask, request, render_template_string
+from flask import Flask, request, render_template_string, session
 from dotenv import load_dotenv
 from ed25519_blake2b import SigningKey
 
 load_dotenv()
 
-app = Flask(__name__)
+# ---- жёстко в коде (не приватное) ----
+REWARD     = 3000000000000000000000000   # 0.003 XNO
+NODE       = "https://rpc.nano.to"
+SEED_INDEX = 0
 
-SOURCE         = (os.getenv("SOURCE") or "").strip()
-SEED           = (os.getenv("SEED") or os.getenv("PRIVATE_KEY") or "").strip()
-SEED_INDEX     = int(os.getenv("SEED_INDEX", os.getenv("INDEX", "0")))
-RPC_KEY        = os.getenv("RPC_KEY", "")
-REWARD         = int(os.getenv("REWARD", "3000000000000000000000000"))
-NODE           = os.getenv("NODE", "https://rpc.nano.to")
-DB             = os.getenv("DB", "faucet.db")
-COOLDOWN       = int(os.getenv("COOLDOWN", "86400"))
-TURNSTILE_SITE = os.getenv("TURNSTILE_SITE_KEY", "")
-TURNSTILE_SEC  = os.getenv("TURNSTILE_SECRET_KEY", "")
+# ---- из переменных Render ----
+SOURCE     = (os.getenv("SOURCE") or "").strip()
+SEED       = (os.getenv("SEED") or os.getenv("PRIVATE_KEY") or "").strip()
+RPC_KEY    = os.getenv("RPC_KEY", "")
+SECRET_KEY = os.getenv("SECRET_KEY")
+DB         = os.getenv("DB", "faucet.db")
+COOLDOWN   = int(os.getenv("COOLDOWN", "86400"))
+
+app = Flask(__name__)
+app.secret_key = SECRET_KEY or os.urandom(24).hex()
 
 A = "13456789abcdefghijkmnopqrstuwxyz"
 
@@ -43,24 +47,17 @@ def valid_address(addr):
         return False
 
 if not SEED:
-    raise SystemExit("SEED (или PRIVATE_KEY) не задан в .env")
+    raise SystemExit("SEED не задан в Environment")
 if not SOURCE:
-    raise SystemExit("SOURCE не задан в .env")
-try:
-    PRIVATE_KEY = hashlib.blake2b(bytes.fromhex(SEED) + SEED_INDEX.to_bytes(4,'big'), digest_size=32).digest()
-except Exception as e:
-    raise SystemExit(f"плохой SEED: {e}")
+    raise SystemExit("SOURCE не задан в Environment")
 
-try:
-    sk = SigningKey(PRIVATE_KEY)
-    vk = sk.get_verifying_key() if hasattr(sk, "get_verifying_key") else sk.get_verify_key()
-    derived_pub = vk.to_bytes() if hasattr(vk, "to_bytes") else bytes(vk)
-    if derived_pub != decode_address(SOURCE):
-        raise SystemExit(f"SEED[#{SEED_INDEX}] не соответствует SOURCE={SOURCE}")
-except SystemExit:
-    raise
-except Exception as e:
-    print(f"WARNING: не удалось проверить seed/source: {e}")
+PRIVATE_KEY = hashlib.blake2b(bytes.fromhex(SEED) + SEED_INDEX.to_bytes(4,'big'), digest_size=32).digest()
+
+sk = SigningKey(PRIVATE_KEY)
+vk = sk.get_verifying_key() if hasattr(sk, "get_verifying_key") else sk.get_verify_key()
+derived_pub = vk.to_bytes() if hasattr(vk, "to_bytes") else bytes(vk)
+if derived_pub != decode_address(SOURCE):
+    raise SystemExit(f"SEED[#{SEED_INDEX}] не соответствует SOURCE={SOURCE}")
 
 def init_db():
     c = sqlite3.connect(DB)
@@ -77,39 +74,47 @@ HTML = """
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>nano faucet</title>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#ffffff;color:#000000;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
 .main{display:flex;flex-direction:column;align-items:center;gap:10px;width:100%;max-width:340px;padding:0 16px}
 .title{color:#444444;font-size:24px;font-weight:800;letter-spacing:-0.5px;margin-bottom:10px}
 .logo{width:120px;height:120px;border-radius:50%;object-fit:cover;margin-bottom:4px}
-form{display:flex;gap:8px;width:100%}
-input{flex:1;padding:12px;border:1px solid #cccccc;border-radius:8px;font-size:14px;font-family:monospace;outline:none;min-width:0}
+form{display:flex;flex-direction:column;gap:8px;width:100%}
+input{padding:12px;border:1px solid #cccccc;border-radius:8px;font-size:14px;font-family:monospace;outline:none;min-width:0;width:100%}
 input:focus{border-color:#0052ff}
 button{padding:12px 16px;background:#0052ff;color:#ffffff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
 button:hover{background:#0043d1}
 button:disabled{background:#a0c0ff;cursor:not-allowed}
 .msg{font-size:13px;color:#ff0000;min-height:16px;text-align:center;margin-top:2px}
+.captcha-row{display:flex;gap:8px;align-items:center;width:100%}
+.captcha-row input{flex:1}
+.captcha-label{font-size:13px;color:#555;white-space:nowrap}
 </style>
 </head>
 <body>
 <div class="main">
 <div class="title">nano faucet</div>
 <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/1567.png" class="logo" alt="xno">
-<form method="post" action="/claim" onsubmit="this.querySelector('button').disabled=true">
+<form method="post" action="/claim">
 <input type="text" name="wallet" placeholder="nano_..." autocomplete="off" spellcheck="false" required>
+<div class="captcha-row">
+  <span class="captcha-label">{{ q }} =</span>
+  <input type="text" name="captcha" placeholder="ответ" autocomplete="off" required>
+</div>
 <button type="submit">enter</button>
 </form>
 <div class="msg">{{ msg }}</div>
-{% if sitekey %}<div class="cf-turnstile" data-sitekey="{{ sitekey }}"></div>{% endif %}
 </div>
 </body>
 </html>
 """
 
 def page(msg=""):
-    return render_template_string(HTML, msg=msg, sitekey=TURNSTILE_SITE)
+    a = random.randint(2, 9)
+    b = random.randint(1, 9)
+    session["captcha_answer"] = str(a + b)
+    return render_template_string(HTML, msg=msg, q=f"{a} + {b}")
 
 def client_ip():
     for h in ("CF-Connecting-IP", "X-Real-IP"):
@@ -121,24 +126,8 @@ def client_ip():
         return xff.split(",")[0].strip()
     return request.remote_addr or "unknown"
 
-def verify_captcha(token, ip):
-    if not TURNSTILE_SEC:
-        return True
-    if not token:
-        return False
-    try:
-        r = requests.post(
-            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-            data={"secret": TURNSTILE_SEC, "response": token, "remoteip": ip},
-            timeout=5,
-        ).json()
-        return bool(r.get("success"))
-    except Exception:
-        return False
-
 def send_nano(dest, amount):
     headers = {"Authorization": RPC_KEY, "Content-Type": "application/json"}
-
     try:
         info = requests.post(NODE, json={"action":"account_info","account":SOURCE},
                              headers=headers, timeout=10).json()
@@ -200,14 +189,15 @@ def claim():
     now    = int(time.time())
     day_ago = now - COOLDOWN
 
+    answer = (request.form.get("captcha") or "").strip()
+    correct = session.pop("captcha_answer", None)
+    if not correct or answer != correct:
+        return page("wrong captcha")
+
     if not valid_address(wallet):
         return page("invalid address")
     if wallet == SOURCE:
         return page("cannot claim to faucet itself")
-
-    token = request.form.get("cf-turnstile-response", "")
-    if not verify_captcha(token, ip):
-        return page("captcha failed")
 
     c = sqlite3.connect(DB)
     try:
@@ -229,8 +219,6 @@ def claim():
         c.close()
 
 if __name__ == "__main__":
-    if not TURNSTILE_SITE:
-        print("WARNING: капча не настроена (TURNSTILE_SITE_KEY пуст)")
     print(f"faucet  : {SOURCE}")
     print(f"reward  : {REWARD/10**30:.6f} XNO")
     print(f"index   : {SEED_INDEX}")
