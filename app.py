@@ -6,7 +6,7 @@ import random
 import base64
 import io
 import requests
-from flask import Flask, request, render_template_string, session
+from flask import Flask, request, render_template_string, session, redirect
 from dotenv import load_dotenv
 from py_ed25519_blake2b import SigningKey
 from PIL import Image, ImageDraw, ImageFont
@@ -100,6 +100,7 @@ HTML = """
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
 <title>nano faucet</title>
 <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/botd@1/dist/botd.min.js"></script>
 <script src="https://unpkg.com/bot-signal"></script>
@@ -213,9 +214,18 @@ def send_nano(dest, amount):
         return {"error": f"process: {e}"}
     return p
 
+def flash(msg):
+    session["msg"] = msg
+    return redirect("/")
+
 @app.route("/")
 def index():
-    return page("")
+    msg = session.pop("msg", "")
+    resp = app.make_response(page(msg))
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    resp.headers["Pragma"] = "no-cache"
+    resp.headers["Expires"] = "0"
+    return resp
 
 @app.route("/claim", methods=["POST"])
 def claim():
@@ -225,42 +235,40 @@ def claim():
     day_ago = now - COOLDOWN
 
     if request.form.get("website"):
-        return page("bot detected")
-
+        return flash("bot detected")
     if request.form.get("botsignal_flag", "unknown") == "bot":
-        return page("bot detected")
-
+        return flash("bot detected")
     if request.form.get("bot_flag", "false") == "true":
-        return page("bot detected")
+        return flash("bot detected")
 
     form_time = request.form.get("form_time", "")
     if form_time and form_time.isdigit():
         if int(time.time() * 1000) - int(form_time) < 1500:
-            return page("bot detected")
+            return flash("bot detected")
 
     answer = (request.form.get("captcha") or "").strip().upper()
     correct = session.pop("captcha_text", None)
     if not correct or answer != correct:
-        return page("wrong captcha")
+        return flash("wrong captcha")
 
     if not valid_address(wallet):
-        return page("invalid address")
+        return flash("invalid address")
     if wallet == SOURCE:
-        return page("cannot claim to faucet itself")
+        return flash("cannot claim to faucet itself")
 
     c = sqlite3.connect(DB)
     try:
         row = c.execute("select 1 from claims where (ip=? or wallet=?) and ts>?",
                         (ip, wallet, day_ago)).fetchone()
         if row:
-            return page("wait 24h")
+            return flash("wait 24h")
         result = send_nano(wallet, REWARD)
         if "hash" in result:
             c.execute("insert into claims values (?,?,?)", (ip, wallet, now))
             c.commit()
-            return page(f"sent {REWARD/10**30:.6f} XNO")
+            return flash(f"sent {REWARD/10**30:.6f} XNO")
         print(f"send error: {result}")
-        return page("send failed, try later")
+        return flash("send failed, try later")
     finally:
         c.close()
 
