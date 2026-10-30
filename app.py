@@ -6,7 +6,7 @@ import random
 import requests
 from flask import Flask, request, render_template_string, session
 from dotenv import load_dotenv
-from ed25519_blake2b import SigningKey
+from py_ed25519_blake2b import SigningKey
 
 load_dotenv()
 
