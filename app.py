@@ -113,10 +113,10 @@ body{background:#ffffff;color:#000000;font-family:-apple-system,BlinkMacSystemFo
 .logo{width:120px;height:120px;border-radius:50%;object-fit:cover;margin-bottom:4px}
 form{display:flex;flex-direction:column;gap:8px;width:100%}
 input[type=text]{padding:12px;border:1px solid #cccccc;border-radius:8px;font-size:14px;font-family:monospace;outline:none;width:100%}
-input[type=text]:focus{border-color:#0052ff}
-button{padding:12px 16px;background:#0052ff;color:#ffffff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
-button:hover{background:#0043d1}
-button:disabled{background:#a0c0ff;cursor:not-allowed}
+input[type=text]:focus{border-color:#0033cc}
+button{padding:12px 16px;background:#0033cc;color:#ffffff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+button:hover{background:#002ba8}
+button:disabled{background:#7a8fc9;cursor:not-allowed}
 .msg{font-size:13px;color:#ff0000;min-height:16px;text-align:center;margin-top:2px}
 .captcha-row{display:flex;gap:8px;align-items:center;width:100%}
 .captcha-row img{border-radius:6px;border:1px solid #ddd;height:55px}
@@ -131,7 +131,7 @@ button:disabled{background:#a0c0ff;cursor:not-allowed}
 <input type="text" name="wallet" placeholder="nano_..." autocomplete="off" spellcheck="false" required>
 <div class="captcha-row">
   <img src="data:image/png;base64,{{ captcha_img }}" alt="captcha">
-  <input type="text" name="captcha" placeholder="буквы" autocomplete="off" required maxlength="6">
+  <input type="text" name="captcha" placeholder="code" autocomplete="off" required maxlength="6">
 </div>
 <input type="hidden" name="pow_challenge" value="{{ pow_challenge }}">
 <input type="hidden" name="pow_nonce" id="pow_nonce" value="">
