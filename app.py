@@ -113,11 +113,12 @@ body{background:#ffffff;color:#000000;font-family:-apple-system,BlinkMacSystemFo
 .logo{width:120px;height:120px;border-radius:50%;object-fit:cover;margin-bottom:4px}
 form{display:flex;flex-direction:column;gap:8px;width:100%}
 input[type=text]{padding:12px;border:1px solid #cccccc;border-radius:8px;font-size:14px;font-family:monospace;outline:none;width:100%}
-input[type=text]:focus{border-color:#0033cc}
-button{padding:12px 16px;background:#0033cc;color:#ffffff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
-button:hover{background:#002ba8}
-button:disabled{background:#7a8fc9;cursor:not-allowed}
-.msg{font-size:13px;color:#ff0000;min-height:16px;text-align:center;margin-top:2px}
+input[type=text]:focus{border-color:#00bfff}
+button{padding:12px 16px;background:#00bfff;color:#ffffff;border:none;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer}
+button:hover{background:#00a3dd}
+button:disabled{background:#b8e5f7;cursor:not-allowed}
+.msg{font-size:13px;color:#dc2626;min-height:16px;text-align:center;margin-top:2px}
+.msg.ok{color:#16a34a}
 .captcha-row{display:flex;gap:8px;align-items:center;width:100%}
 .captcha-row img{border-radius:6px;border:1px solid #ddd;height:55px}
 .captcha-row input{flex:1;text-transform:uppercase}
@@ -139,7 +140,7 @@ button:disabled{background:#7a8fc9;cursor:not-allowed}
 <input type="hidden" name="botsignal_flag" id="botsignal_flag" value="unknown">
 <button type="submit" id="submit-btn">enter</button>
 </form>
-<div class="msg">{{ msg }}</div>
+<div class="msg{% if 'sent' in msg %} ok{% endif %}">{{ msg }}</div>
 </div>
 <script>
 (function(){
