@@ -104,6 +104,7 @@ HTML = """
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>nano faucet</title>
 <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/botd@1/dist/botd.min.js"></script>
+<script src="https://unpkg.com/bot-signal"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:#ffffff;color:#000000;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh}
@@ -135,6 +136,7 @@ button:disabled{background:#a0c0ff;cursor:not-allowed}
 <input type="hidden" name="pow_challenge" value="{{ pow_challenge }}">
 <input type="hidden" name="pow_nonce" id="pow_nonce" value="">
 <input type="hidden" name="bot_flag" id="bot_flag" value="pending">
+<input type="hidden" name="botsignal_flag" id="botsignal_flag" value="unknown">
 <button type="submit" id="submit-btn">enter</button>
 </form>
 <div class="msg">{{ msg }}</div>
@@ -142,11 +144,24 @@ button:disabled{background:#a0c0ff;cursor:not-allowed}
 <script>
 (function(){
   function setFlag(v){ document.getElementById('bot_flag').value = v; }
+  // BotD (существующая проверка)
   if (typeof Botd !== 'undefined') {
     Botd.load().then(function(d){ return d.detect(); })
       .then(function(r){ setFlag(r.bot ? 'true' : 'false'); })
       .catch(function(){ setFlag('false'); });
   } else { setFlag('false'); }
+
+  // bot-signal (новая невидимая проверка)
+  if (typeof BotSignal !== 'undefined' && typeof BotSignal.isHuman === 'function') {
+    try {
+      var human = BotSignal.isHuman(window);
+      var bsField = document.getElementById('botsignal_flag');
+      if (bsField) bsField.value = human ? 'human' : 'bot';
+    } catch (e) {
+      var bsField = document.getElementById('botsignal_flag');
+      if (bsField) bsField.value = 'unknown';
+    }
+  }
 })();
 
 document.getElementById('faucet-form').addEventListener('submit', async function(e){
