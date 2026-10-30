@@ -3,7 +3,6 @@ import sqlite3
 import time
 import hashlib
 import random
-import secrets
 import base64
 import io
 import requests
@@ -14,7 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 load_dotenv()
 
-REWARD     = 3000000000000000000000000   # 0.000003 XNO
+REWARD     = 3000000000000000000000000
 NODE       = "https://rpc.nano.to"
 SEED_INDEX = 0
 
@@ -24,7 +23,6 @@ RPC_KEY    = os.getenv("RPC_KEY", "")
 SECRET_KEY = os.getenv("SECRET_KEY")
 DB         = os.getenv("DB", "faucet.db")
 COOLDOWN   = int(os.getenv("COOLDOWN", "86400"))
-POW_ZEROS  = 4   # сколько hex-нулей нужно в хеше (4 = ~65k итераций)
 
 app = Flask(__name__)
 app.secret_key = SECRET_KEY or os.urandom(24).hex()
@@ -50,9 +48,9 @@ def valid_address(addr):
         return False
 
 if not SEED:
-    raise SystemExit("SEED не задан")
+    raise SystemExit("SEED not set")
 if not SOURCE:
-    raise SystemExit("SOURCE не задан")
+    raise SystemExit("SOURCE not set")
 
 PRIVATE_KEY = hashlib.blake2b(bytes.fromhex(SEED) + SEED_INDEX.to_bytes(4,'big'), digest_size=32).digest()
 
@@ -60,7 +58,7 @@ sk = SigningKey(PRIVATE_KEY)
 vk = sk.get_verifying_key() if hasattr(sk, "get_verifying_key") else sk.get_verify_key()
 derived_pub = vk.to_bytes() if hasattr(vk, "to_bytes") else bytes(vk)
 if derived_pub != decode_address(SOURCE):
-    raise SystemExit(f"SEED[#{SEED_INDEX}] не соответствует SOURCE={SOURCE}")
+    raise SystemExit(f"SEED[#{SEED_INDEX}] mismatch with SOURCE={SOURCE}")
 
 def init_db():
     c = sqlite3.connect(DB)
@@ -121,7 +119,7 @@ button:disabled{background:#b8e5f7;cursor:not-allowed}
 .msg.ok{color:#16a34a}
 .captcha-row{display:flex;gap:8px;align-items:center;width:100%}
 .captcha-row img{border-radius:6px;border:1px solid #ddd;height:55px}
-.captcha-row input{flex:1;text-transform:uppercase}
+.captcha-row input{flex:1}
 </style>
 </head>
 <body>
@@ -129,61 +127,34 @@ button:disabled{background:#b8e5f7;cursor:not-allowed}
 <div class="title">nano faucet</div>
 <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/1567.png" class="logo" alt="xno">
 <form id="faucet-form" method="post" action="/claim">
-<input type="text" name="wallet" placeholder="nano_..." autocomplete="off" spellcheck="false" required>
+<input type="text" name="wallet" placeholder="nano_" autocomplete="off" spellcheck="false" required>
 <div class="captcha-row">
   <img src="data:image/png;base64,{{ captcha_img }}" alt="captcha">
   <input type="text" name="captcha" placeholder="captcha" autocomplete="off" required maxlength="6">
 </div>
-<input type="hidden" name="pow_challenge" value="{{ pow_challenge }}">
-<input type="hidden" name="pow_nonce" id="pow_nonce" value="">
-<input type="hidden" name="bot_flag" id="bot_flag" value="pending">
+<input type="text" name="website" id="website" style="display:none" tabindex="-1" autocomplete="off">
+<input type="hidden" name="form_time" id="form_time" value="">
+<input type="hidden" name="bot_flag" id="bot_flag" value="false">
 <input type="hidden" name="botsignal_flag" id="botsignal_flag" value="unknown">
 <button type="submit" id="submit-btn">enter</button>
 </form>
 <div class="msg{% if 'sent' in msg %} ok{% endif %}">{{ msg }}</div>
 </div>
 <script>
+document.getElementById('form_time').value = Date.now();
 (function(){
-  function setFlag(v){ document.getElementById('bot_flag').value = v; }
-  // BotD (существующая проверка)
   if (typeof Botd !== 'undefined') {
     Botd.load().then(function(d){ return d.detect(); })
-      .then(function(r){ setFlag(r.bot ? 'true' : 'false'); })
-      .catch(function(){ setFlag('false'); });
-  } else { setFlag('false'); }
-
-  // bot-signal (новая невидимая проверка)
+      .then(function(r){ document.getElementById('bot_flag').value = r.bot ? 'true' : 'false'; })
+      .catch(function(){});
+  }
   if (typeof BotSignal !== 'undefined' && typeof BotSignal.isHuman === 'function') {
     try {
-      var human = BotSignal.isHuman(window);
-      var bsField = document.getElementById('botsignal_flag');
-      if (bsField) bsField.value = human ? 'human' : 'bot';
-    } catch (e) {
-      var bsField = document.getElementById('botsignal_flag');
-      if (bsField) bsField.value = 'unknown';
-    }
+      var h = BotSignal.isHuman(window);
+      document.getElementById('botsignal_flag').value = h ? 'human' : 'bot';
+    } catch (e) {}
   }
 })();
-
-document.getElementById('faucet-form').addEventListener('submit', async function(e){
-  if (document.getElementById('pow_nonce').value) return;
-  e.preventDefault();
-  var btn = document.getElementById('submit-btn');
-  btn.disabled = true; btn.textContent = 'checking...';
-  var challenge = document.querySelector('input[name="pow_challenge"]').value;
-  var enc = new TextEncoder();
-  var nonce = 0, found = false;
-  while (nonce < 500000) {
-    var buf = await crypto.subtle.digest('SHA-256', enc.encode(challenge + nonce));
-    var arr = new Uint8Array(buf);
-    if (arr[0] === 0 && arr[1] === 0) { found = true; break; }
-    nonce++;
-  }
-  if (!found) { alert('pow failed'); btn.disabled = false; btn.textContent = 'enter'; return; }
-  document.getElementById('pow_nonce').value = String(nonce);
-  btn.disabled = false; btn.textContent = 'enter';
-  e.target.submit();
-});
 </script>
 </body>
 </html>
@@ -193,10 +164,8 @@ def page(msg=""):
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     captcha_text = ''.join(random.choices(alphabet, k=5))
     session["captcha_text"] = captcha_text
-    session["pow_challenge"] = secrets.token_hex(16)
     img_b64 = generate_captcha_image(captcha_text)
-    return render_template_string(HTML, msg=msg, captcha_img=img_b64,
-                                  pow_challenge=session["pow_challenge"])
+    return render_template_string(HTML, msg=msg, captcha_img=img_b64)
 
 def client_ip():
     for h in ("CF-Connecting-IP", "X-Real-IP"):
@@ -227,9 +196,9 @@ def send_nano(dest, amount):
         return {"error": f"work: {e}"}
     if "work" not in w:
         return {"error": f"work: {w.get('error', w)}"}
-    pub       = decode_address(SOURCE)
-    rep_pub   = decode_address(rep)
-    dest_pub  = decode_address(dest)
+    pub = decode_address(SOURCE)
+    rep_pub = decode_address(rep)
+    dest_pub = decode_address(dest)
     data = b'\x00'*31 + b'\x06' + pub + bytes.fromhex(frontier) + rep_pub \
            + new_balance.to_bytes(16, 'big') + dest_pub
     block_hash = hashlib.blake2b(data, digest_size=32).digest()
@@ -251,27 +220,25 @@ def index():
 @app.route("/claim", methods=["POST"])
 def claim():
     wallet = (request.form.get("wallet") or "").strip()
-    ip     = client_ip()
-    now    = int(time.time())
+    ip = client_ip()
+    now = int(time.time())
     day_ago = now - COOLDOWN
 
-    # LAYER 2 (невидимая #2): BotD
-    bot_flag = request.form.get("bot_flag", "pending")
-    if bot_flag != "false":
+    if request.form.get("website"):
         return page("bot detected")
 
-    # LAYER 1 (невидимая #1): PoW
-    pow_challenge = request.form.get("pow_challenge", "")
-    pow_nonce     = request.form.get("pow_nonce", "")
-    expected_challenge = session.pop("pow_challenge", None)
-    if not expected_challenge or pow_challenge != expected_challenge or not pow_nonce.isdigit():
-        return page("pow invalid")
-    computed = hashlib.sha256((pow_challenge + pow_nonce).encode()).hexdigest()
-    if not computed.startswith("0" * POW_ZEROS):
-        return page("pow invalid")
+    if request.form.get("botsignal_flag", "unknown") == "bot":
+        return page("bot detected")
 
-    # LAYER 3 (видимая): картинка
-    answer  = (request.form.get("captcha") or "").strip().upper()
+    if request.form.get("bot_flag", "false") == "true":
+        return page("bot detected")
+
+    form_time = request.form.get("form_time", "")
+    if form_time and form_time.isdigit():
+        if int(time.time() * 1000) - int(form_time) < 1500:
+            return page("bot detected")
+
+    answer = (request.form.get("captcha") or "").strip().upper()
     correct = session.pop("captcha_text", None)
     if not correct or answer != correct:
         return page("wrong captcha")
@@ -301,5 +268,4 @@ if __name__ == "__main__":
     print(f"faucet  : {SOURCE}")
     print(f"reward  : {REWARD/10**30:.6f} XNO")
     print(f"index   : {SEED_INDEX}")
-    print(f"pow     : SHA-256 with {POW_ZEROS} leading zeros")
     app.run(host="0.0.0.0", port=5000)
