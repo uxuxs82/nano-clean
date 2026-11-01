@@ -13,8 +13,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 load_dotenv()
 
-REWARD     = 3000000000000000000000000
-NODE       = "https://rpc.nano.to"
+REWARD = 3 * 10**25  # 0.00003 XNONODE       = "https://rpc.nano.to"
 SEED_INDEX = 0
 
 SOURCE     = (os.getenv("SOURCE") or "").strip()
